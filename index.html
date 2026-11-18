@@ -1186,7 +1186,7 @@
       }
 
       (function () {
-        var a = $('bgm'), btn = $('mbtn'), vol = $('mvol'), msg = $('mmsg'), MS = 'kegiatan-musik', st = {on: false, v: 60};
+        var a = $('bgm'), btn = $('mbtn'), vol = $('mvol'), msg = $('mmsg'), MS = 'kegiatan-musik', st = {on: true, v: 60};
         try {var r = localStorage.getItem(MS); if (r) st = JSON.parse(r) || st;} catch (e) { }
         function sv() {try {localStorage.setItem(MS, JSON.stringify(st));} catch (e) { } }
         vol.value = st.v; a.volume = st.v / 100;
@@ -1196,7 +1196,17 @@
         btn.onclick = function () {if (a.paused) play(); else {a.pause(); st.on = false; sv(); paint();} };
         vol.oninput = function () {st.v = +vol.value; a.volume = st.v / 100; sv();};
         a.addEventListener('error', fail); a.addEventListener('play', paint); a.addEventListener('pause', paint);
-        if (st.on) {var once = function (e) {document.removeEventListener('pointerdown', once); if (e.target.closest && e.target.closest('#music')) return; if (a.paused) play();}; document.addEventListener('pointerdown', once);}
+        if (st.on) {
+          play();
+          var unlock = function (e) {
+            document.removeEventListener('pointerdown', unlock);
+            document.removeEventListener('keydown', unlock);
+            if (e.target && e.target.closest && e.target.closest('#music')) return;
+            if (st.on && a.paused) play();
+          };
+          document.addEventListener('pointerdown', unlock);
+          document.addEventListener('keydown', unlock);
+        }
       })();
       setInterval(kick, 60000); render();
     })();

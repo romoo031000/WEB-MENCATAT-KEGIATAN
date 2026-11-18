@@ -976,6 +976,30 @@
       accent-color: var(--a)
     }
 
+    .eq {
+      display: flex;
+      align-items: flex-end;
+      gap: 3px;
+      height: 22px;
+      width: 66px;
+      padding: 0 4px;
+      flex: none
+    }
+
+    .eq i {
+      flex: 1;
+      height: 100%;
+      border-radius: 2px;
+      background: linear-gradient(to top, var(--a), var(--b));
+      transform: scaleY(.06);
+      transform-origin: bottom;
+      will-change: transform
+    }
+
+    .bgimg {
+      filter: brightness(calc(1 + var(--beat, 0) * .25))
+    }
+
     .music small {
       color: var(--muted);
       font-size: .78rem;
@@ -997,7 +1021,7 @@
   <div class="name" aria-hidden="true">Romo</div>
   <div class="music" id="music"><button type="button" id="mbtn" aria-pressed="false"><span id="mico">&#9835;</span><span
         id="mtxt">Putar musik</span></button><input type="range" id="mvol" min="0" max="100" value="60"
-      aria-label="Volume musik"><small id="mmsg" hidden></small></div>
+      aria-label="Volume musik"><div class="eq" id="eq" aria-hidden="true"></div><small id="mmsg" hidden></small></div>
   <audio id="bgm" src="lagu.mp3" loop preload="none"></audio>
   <main>
     <section class="hero">
@@ -1186,13 +1210,49 @@
       }
 
       (function () {
+        var PLAYLIST = ['lagu.mp3', 'lagu2.mp3'], cur = 0;
         var a = $('bgm'), btn = $('mbtn'), vol = $('mvol'), msg = $('mmsg'), MS = 'kegiatan-musik', st = {on: true, v: 60};
         try {var r = localStorage.getItem(MS); if (r) st = JSON.parse(r) || st;} catch (e) { }
         function sv() {try {localStorage.setItem(MS, JSON.stringify(st));} catch (e) { } }
         vol.value = st.v; a.volume = st.v / 100;
         function paint() {var p = !a.paused; btn.setAttribute('aria-pressed', p ? 'true' : 'false'); $('mtxt').textContent = p ? 'Jeda musik' : 'Putar musik';}
+        var eqEl = $('eq'), bars = [], NB = 24, an = null, freq = null;
+        var calm = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+        var levels = [];
+        for (var k = 0; k < NB; k++) {var bar = document.createElement('i'); eqEl.appendChild(bar); bars.push(bar); levels.push(0);}
+        function setupViz() {
+          if (an) return;
+          var c = ctx();
+          if (!c || c.state !== 'running') return;
+          try {
+            var src = c.createMediaElementSource(a);
+            an = c.createAnalyser(); an.fftSize = 256; freq = new Uint8Array(an.frequencyBinCount);
+            src.connect(an); an.connect(c.destination);
+          } catch (e) { an = null; }
+        }
+        function wake() {
+          var c = ctx(); if (!c) return;
+          if (c.state === 'running') setupViz(); else c.resume().then(setupViz).catch(function () {});
+        }
+        function frame(now) {
+          requestAnimationFrame(frame);
+          var playing = !a.paused;
+          if (playing && an) an.getByteFrequencyData(freq);
+          for (var j = 0; j < NB; j++) {
+            var target = 0;
+            if (playing && an) target = freq[Math.floor(j * freq.length * 0.6 / NB)] / 255;
+            else if (playing) target = 0.25 + 0.2 * Math.sin(now / 180 + j * 0.6);
+            levels[j] += (target - levels[j]) * (target > levels[j] ? 0.5 : 0.12);
+            bars[j].style.transform = 'scaleY(' + Math.max(0.06, levels[j]).toFixed(3) + ')';
+          }
+          if (!calm) {
+            var bass = (levels[0] + levels[1] + levels[2] + levels[3]) / 4;
+            document.documentElement.style.setProperty('--beat', bass.toFixed(3));
+          }
+        }
+        requestAnimationFrame(frame);
         function fail() {msg.hidden = false; msg.textContent = 'File lagu.mp3 belum ditemukan'; paint();}
-        function play() {msg.hidden = true; var pr = a.play(); if (pr && pr.then) pr.then(function () {st.on = true; sv(); paint();}).catch(function () {paint();}); else {st.on = true; sv(); paint();} }
+        function play() {msg.hidden = true; var pr = a.play(); if (pr && pr.then) pr.then(function () {st.on = true; sv(); paint(); wake();}).catch(function () {paint();}); else {st.on = true; sv(); paint(); wake();} }
         btn.onclick = function () {if (a.paused) play(); else {a.pause(); st.on = false; sv(); paint();} };
         vol.oninput = function () {st.v = +vol.value; a.volume = st.v / 100; sv();};
         a.addEventListener('error', fail); a.addEventListener('play', paint); a.addEventListener('pause', paint);
